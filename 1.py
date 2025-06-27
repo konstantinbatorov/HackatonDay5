@@ -1,10 +1,7 @@
-<<<<<<< HEAD
-=======
-
->>>>>>> f6a08f7ccf2afbb47de470333a4d02e3f198eb8d
 import pygame
 import math
 import sys
+import os
 
 # Инициализация Pygame
 pygame.init()
@@ -29,7 +26,7 @@ DARK_GRAY = (50, 50, 50)
 DISABLED_GRAY = (80, 80, 80)
 
 # Настройки игры
-START_MONEY = 200  # Уменьшил стартовые деньги для усложнения
+START_MONEY = 200  # стартовые деньги
 ENEMY_BASE_HEALTH = 100
 ENEMY_BASE_SPEED = 1.0
 BULLET_SPEED = 5
@@ -52,27 +49,36 @@ pygame.display.set_caption("Tower Defence")
 
 clock = pygame.time.Clock()
 
-# Путь для врагов — список точек (по центру дорожки)
+# Путь для врагов — список точек (по центру дорожки), из второго кода (более сложный)
 path = [
-    (640, 80),
-    (64, 80),
-    (64, 320),
-    (576, 320),
-    (576, 576),
+    (640, 130),
+    (130, 130),
+    (50, 260),
+    (130, 350),
+    (510, 350),
+    (590, 463),
+    (510, 576),
     (0, 576)
 ]
 
-# Красные квадраты — места для башен (x, y, width, height)
+# Красные квадраты — места для башен (x, y, width, height), из второго кода
 tower_zones = [
-    pygame.Rect(20, 230, 50, 50),
-    pygame.Rect(180, 120, 50, 50),
-    pygame.Rect(350, 120, 50, 50),
-    pygame.Rect(420, 400, 50, 50),
-    pygame.Rect(600, 400, 50, 50)
+    pygame.Rect(42, 42, 50, 50),
+    pygame.Rect(180, 215, 50, 50),
+    pygame.Rect(180, 430, 50, 50),
+    pygame.Rect(480, 215, 50, 50),
+    pygame.Rect(400, 430, 50, 50),
 ]
 
 # Голубой квадрат — финиш (нижний левый угол)
 finish_zone = pygame.Rect(0, 520, 80, 80)
+
+# Попытка загрузить фон из второго кода
+try:
+    background_img = pygame.image.load('background.png')
+    background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
+except Exception:
+    background_img = None
 
 # Класс для описания типа башни
 class TowerType:
@@ -102,14 +108,17 @@ def get_tower_stats(tower_type_name, level):
 
 # Функция для рисования лужайки, дорожки, зон башен и финиша
 def draw_path():
-    screen.fill(GREEN)
-    for i in range(len(path) - 1):
-        start = path[i]
-        end = path[i + 1]
-        pygame.draw.line(screen, PATH_COLOR, start, end, 40)
-    for rect in tower_zones:
-        pygame.draw.rect(screen, RED, rect)
-    pygame.draw.rect(screen, LIGHT_BLUE, finish_zone)
+    if background_img:
+        screen.blit(background_img, (0, 0))
+    else:
+        screen.fill(GREEN)
+        for i in range(len(path) - 1):
+            start = path[i]
+            end = path[i + 1]
+            pygame.draw.line(screen, PATH_COLOR, start, end, 40)
+        for rect in tower_zones:
+            pygame.draw.rect(screen, RED, rect)
+        pygame.draw.rect(screen, LIGHT_BLUE, finish_zone)
 
 # Класс врага
 class Enemy:
@@ -210,7 +219,7 @@ class Bullet:
         self.radius = 5
         self.damage = damage
         self.alive = True
-        self.life_timer = 0  # добавлено для ограничения жизни пули
+        self.life_timer = 0  # ограничение жизни пули
         self.max_life = 120  # 2 секунды жизни пули
 
     def update(self):
@@ -252,7 +261,7 @@ class EnemyBullet:
         self.radius = 5
         self.damage = damage
         self.alive = True
-        self.life_timer = 0  # добавлено для ограничения жизни пули
+        self.life_timer = 0  # ограничение жизни пули
         self.max_life = 120
 
     def update(self):
@@ -564,7 +573,6 @@ def main():
                 enemies_spawned = 0
                 enemies_per_wave = 10 + (current_wave - 1) * 5
                 # Можно увеличить здоровье и скорость врагов с ростом волны
-                # Но это уже есть в вашем коде, ниже используем current_wave
                 spawn_timer = spawn_interval  # чтобы сразу начать спавн врагов
         else:
             # Волна в процессе - спавним врагов, пока не достигнем лимита
@@ -692,4 +700,3 @@ def wait_for_exit():
 
 if __name__ == "__main__":
     main()
-
