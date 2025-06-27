@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+
+>>>>>>> f6a08f7ccf2afbb47de470333a4d02e3f198eb8d
 import pygame
 import math
 import sys
