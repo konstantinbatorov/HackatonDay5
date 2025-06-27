@@ -1,3 +1,5 @@
+<<<<<<< HEAD
+=======
 import pygame
 import math
 import sys
@@ -335,3 +337,4 @@ def wait_for_exit():
 
 if __name__ == "__main__":
     main()
+>>>>>>> 0c64791d9d0c22478c150ae9b88bf5688e114257
