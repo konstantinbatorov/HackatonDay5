@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import pygame
 import math
 import sys
@@ -17,6 +16,8 @@ GRAY = (100, 100, 100)
 GREEN = (0, 200, 0)  # лужайка
 RED = (255, 0, 0)    # зоны башен
 BLUE = (0, 0, 255)
+CYAN = (0, 255, 255)
+MAGENTA = (255, 0, 255)
 YELLOW = (255, 255, 0)
 LIGHT_BLUE = (100, 200, 255)  # финиш
 PATH_COLOR = (245, 245, 245)  # светло-серый для дорожки
@@ -27,8 +28,6 @@ START_MONEY = 300
 ENEMY_HEALTH = 100
 ENEMY_SPEED = 1.0
 BULLET_SPEED = 5
-TOWER_RANGE = 120
-TOWER_FIRE_RATE = 60  # кадров между выстрелами (FPS)
 
 # Создаем окно
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -38,14 +37,6 @@ clock = pygame.time.Clock()
 
 # Путь для врагов — список точек (по центру дорожки)
 path = [
-    # (50, 270),
-    # (150, 270),
-    # (150, 150),
-    # (400, 150),
-    # (400, 450),
-    # (650, 450),
-    # (650, 300),
-    # (750, 300)
     (640, 80),
     (64, 80),
     (64, 320),
@@ -65,6 +56,23 @@ tower_zones = [
 
 # Голубой квадрат — финиш (нижний левый угол)
 finish_zone = pygame.Rect(0, 520, 80, 80)
+
+# Класс для описания типа башни
+class TowerType:
+    def __init__(self, name, color, range_, fire_rate, damage, radius):
+        self.name = name
+        self.color = color
+        self.range = range_
+        self.fire_rate = fire_rate
+        self.damage = damage
+        self.radius = radius
+
+# Определяем разные типы башен
+tower_types = [
+    TowerType("Стандартная", BLUE, 120, 60, 25, 20),
+    TowerType("Быстрая", CYAN, 100, 20, 10, 15),
+    TowerType("Сильная", MAGENTA, 150, 90, 50, 25)
+]
 
 # Функция для рисования лужайки, дорожки, зон башен и финиша
 def draw_path():
@@ -128,26 +136,27 @@ class Enemy:
         # Здоровье
         health_bar_width = 30
         health_bar_height = 5
-        health_ratio = self.health / self.max_health
+        health_ratio = max(self.health / self.max_health, 0)
         pygame.draw.rect(screen, RED, (self.x - health_bar_width // 2, self.y - self.radius - 10, health_bar_width, health_bar_height))
-        pygame.draw.rect(screen, GREEN, (self.x - health_bar_width // 2, self.y - self.radius - 10, health_bar_width * health_ratio, health_bar_height))
+        pygame.draw.rect(screen, GREEN, (self.x - health_bar_width // 2, self.y - self.radius - 10, int(health_bar_width * health_ratio), health_bar_height))
 
 # Класс башни
 class Tower:
-    def __init__(self, x, y, zone_rect):
+    def __init__(self, x, y, zone_rect, tower_type):
         self.x = x
         self.y = y
-        self.range = TOWER_RANGE
-        self.fire_rate = TOWER_FIRE_RATE
+        self.zone_rect = zone_rect
+        self.type = tower_type
+        self.range = tower_type.range
+        self.fire_rate = tower_type.fire_rate
+        self.damage = tower_type.damage
         self.timer = 0
-        self.color = BLUE
-        self.radius = 20
-        self.zone_rect = zone_rect  # Квадрат, в котором стоит башня
+        self.color = tower_type.color
+        self.radius = tower_type.radius
 
     def update(self, enemies, bullets):
         self.timer += 1
         if self.timer >= self.fire_rate:
-            # Ищем цель
             target = None
             min_dist = float('inf')
             for enemy in enemies:
@@ -157,27 +166,25 @@ class Tower:
                         min_dist = dist
                         target = enemy
             if target:
-                # Стреляем
-                bullet = Bullet(self.x, self.y, target)
+                bullet = Bullet(self.x, self.y, target, self.damage)
                 bullets.append(bullet)
                 self.timer = 0
 
     def draw(self):
         pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius)
-        # Рисуем радиус действия (полупрозрачный)
         s = pygame.Surface((self.range * 2, self.range * 2), pygame.SRCALPHA)
-        pygame.draw.circle(s, (0, 0, 255, 50), (self.range, self.range), self.range)
+        pygame.draw.circle(s, (*self.color, 50), (self.range, self.range), self.range)
         screen.blit(s, (self.x - self.range, self.y - self.range))
 
 # Класс пули
 class Bullet:
-    def __init__(self, x, y, target):
+    def __init__(self, x, y, target, damage):
         self.x = x
         self.y = y
         self.target = target
         self.speed = BULLET_SPEED
         self.radius = 5
-        self.damage = 25
+        self.damage = damage
         self.alive = True
 
     def update(self):
@@ -218,6 +225,7 @@ def main():
     money = START_MONEY
     lives = 10
     font = pygame.font.SysFont(None, 24)
+    selected_tower_type_index = 0
 
     while running:
         clock.tick(FPS)
@@ -227,23 +235,30 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    selected_tower_type_index = 0
+                elif event.key == pygame.K_2:
+                    selected_tower_type_index = 1
+                elif event.key == pygame.K_3:
+                    selected_tower_type_index = 2
+                elif event.key == pygame.K_ESCAPE:
+                    running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # левая кнопка мыши - поставить башню
                     mx, my = event.pos
-                    # Проверяем, что клик внутри какого-то красного квадрата и в нем нет башни
                     for zone_rect in tower_zones:
                         if zone_rect.collidepoint(mx, my):
-                            # Проверяем, что в этой зоне нет башни
                             zone_taken = False
                             for tower in towers:
                                 if tower.zone_rect == zone_rect:
                                     zone_taken = True
                                     break
                             if not zone_taken and money >= TOWER_COST:
-                                # Ставим башню в центр квадрата
                                 cx = zone_rect.x + zone_rect.width // 2
                                 cy = zone_rect.y + zone_rect.height // 2
-                                towers.append(Tower(cx, cy, zone_rect))
+                                tower_type = tower_types[selected_tower_type_index]
+                                towers.append(Tower(cx, cy, zone_rect, tower_type))
                                 money -= TOWER_COST
                             break
 
@@ -275,7 +290,7 @@ def main():
             if not bullet.alive:
                 bullets.remove(bullet)
 
-        # Отрисовка
+        # Отрисовка башен, врагов, пуль
         for tower in towers:
             tower.draw()
         for enemy in enemies:
@@ -288,6 +303,11 @@ def main():
         lives_text = font.render(f"Lives: {lives}", True, BLACK)
         screen.blit(money_text, (10, 10))
         screen.blit(lives_text, (10, 30))
+
+        # Отображаем выбранный тип башни
+        selected_type = tower_types[selected_tower_type_index]
+        tower_info = font.render(f"Selected Tower: {selected_type.name} (1-3 to change)", True, BLACK)
+        screen.blit(tower_info, (10, 50))
 
         if lives <= 0:
             game_over_text = font.render("Game Over! Press ESC to quit.", True, RED)
@@ -315,5 +335,3 @@ def wait_for_exit():
 
 if __name__ == "__main__":
     main()
-=======
->>>>>>> d1d65d97bceec0248cbc455f1836cd7390a7fceb
