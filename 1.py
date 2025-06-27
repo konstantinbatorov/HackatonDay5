@@ -328,7 +328,12 @@ class EnemyBullet:
             self.alive = False
 
     def hit_target(self):
-        self.target.take_damage(self.damage)
+        if hasattr(self.target, "take_damage"):
+            self.target.take_damage(self.damage)
+        else:
+            self.target.health -= self.damage
+            if self.target.health <= 0:
+                self.target.alive = False
         self.alive = False
 
     def draw(self):
