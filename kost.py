@@ -32,7 +32,7 @@ class Object(sprite.Sprite):
 
 
 
-
+print()
 
 
 
