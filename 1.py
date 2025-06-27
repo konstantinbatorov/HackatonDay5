@@ -369,7 +369,12 @@ class EnemyBullet:
             self.alive = False
 
     def hit_target(self):
-        self.target.take_damage(self.damage)
+        if hasattr(self.target, "take_damage"):
+            self.target.take_damage(self.damage)
+        else:
+            self.target.health -= self.damage
+            if self.target.health <= 0:
+                self.target.alive = False
         self.alive = False
 
     def draw(self):
@@ -844,4 +849,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-исправь то что враги не стреляют и не поворачиваются, а турель поворачивается не так исправь это пожалуйстаа о меня уволят с работы
