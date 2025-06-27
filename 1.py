@@ -1,6 +1,7 @@
 import pygame
 import math
 import sys
+import os
 
 # Инициализация Pygame
 pygame.init()
@@ -104,12 +105,6 @@ sprites_towers = {
 # Загружаем спрайты врага
 sprites_enemy = load_sprite_sheet("ez.png", 50, 50)  # 4 ходьба + 5 смерть
 
-# Функция поворота спрайта с сохранением центра
-def rotate_center(image, angle):
-    rotated_image = pygame.transform.rotozoom(image, -angle, 1)
-    rotated_rect = rotated_image.get_rect(center=image.get_rect().center)
-    return rotated_image, rotated_rect
-
 # Класс для описания типа башни
 class TowerType:
     def __init__(self, name, color, range_, fire_rate, damage, radius):
@@ -174,8 +169,6 @@ class Enemy:
         self.is_dying = False
         self.death_anim_done = False
 
-        self.angle = 0  # угол поворота спрайта
-
     def update(self, towers, enemy_bullets):
         if not self.alive and not self.is_dying:
             # Начинаем анимацию смерти
@@ -218,9 +211,6 @@ class Enemy:
             if math.hypot(target_x - self.x, target_y - self.y) < self.speed:
                 self.path_pos += 1
 
-        # Обновляем угол поворота спрайта по направлению движения
-        self.angle = math.degrees(math.atan2(vec_y, vec_x))
-
         # Проверяем, есть ли башня в радиусе атаки, чтобы стрелять
         target = None
         min_dist = float('inf')
@@ -235,10 +225,6 @@ class Enemy:
         if target and self.attack_timer >= self.attack_cooldown:
             enemy_bullets.append(EnemyBullet(self.x, self.y, target, self.attack_damage))
             self.attack_timer = 0
-            # Поворачиваемся к цели при стрельбе
-            dx = target.x - self.x
-            dy = target.y - self.y
-            self.angle = math.degrees(math.atan2(dy, dx))
 
         # Анимация ходьбы
         self.anim_timer += self.anim_speed
@@ -252,15 +238,14 @@ class Enemy:
         if self.is_dying:
             if self.anim_index < len(self.death_frames):
                 frame = self.death_frames[self.anim_index]
-                rotated_frame, rotated_rect = rotate_center(frame, self.angle)
-                rect = rotated_frame.get_rect(center=(int(self.x), int(self.y)))
-                screen.blit(rotated_frame, rect)
+
+                rect = frame.get_rect(center=(int(self.x), int(self.y)))
+                screen.blit(frame, rect)
             return
 
         frame = self.walk_frames[self.anim_index]
-        rotated_frame, rotated_rect = rotate_center(frame, self.angle)
-        rect = rotated_frame.get_rect(center=(int(self.x), int(self.y)))
-        screen.blit(rotated_frame, rect)
+        rect = frame.get_rect(center=(int(self.x), int(self.y)))
+        screen.blit(frame, rect)
 
         # Рисуем полосу здоровья
         health_bar_width = 30
@@ -399,42 +384,27 @@ class Tower:
         self.shoot_anim_timer = 0
         self.shoot_anim_duration = 10  # кадры анимации стрельбы
 
-        self.angle = 0  # угол поворота башни
-
     def update(self, enemies, bullets):
         if not self.alive:
             return
         self.timer += 1
         self.is_shooting = False
-
-        target = None
-        min_dist = float('inf')
-        for enemy in enemies:
-            dist = math.hypot(enemy.x - self.x, enemy.y - self.y)
-            if dist <= self.range and enemy.alive:
-                if dist < min_dist:
-                    min_dist = dist
-                    target = enemy
-
-        if target and self.timer >= self.fire_rate:
-            bullet = Bullet(self.x, self.y, target, self.damage)
-            bullets.append(bullet)
-            self.timer = 0
-            self.is_shooting = True
-            self.shoot_anim_timer = 0
-            self.anim_index = 0  # начать анимацию стрельбы с кадра 0
-            # Поворачиваем башню в сторону цели
-            dx = target.x - self.x
-            dy = target.y - self.y
-            self.angle = math.degrees(math.atan2(dy, dx))
-        elif target:
-            # Если есть цель, поворачиваемся к ней, даже если не стреляем
-            dx = target.x - self.x
-            dy = target.y - self.y
-            self.angle = math.degrees(math.atan2(dy, dx))
-        else:
-            # Нет цели — поворачиваем в исходное положение (0 градусов)
-            self.angle = 0
+        if self.timer >= self.fire_rate:
+            target = None
+            min_dist = float('inf')
+            for enemy in enemies:
+                dist = math.hypot(enemy.x - self.x, enemy.y - self.y)
+                if dist <= self.range and enemy.alive:
+                    if dist < min_dist:
+                        min_dist = dist
+                        target = enemy
+            if target:
+                bullet = Bullet(self.x, self.y, target, self.damage)
+                bullets.append(bullet)
+                self.timer = 0
+                self.is_shooting = True
+                self.shoot_anim_timer = 0
+                self.anim_index = 0  # начать анимацию стрельбы с кадра 0
 
         # Обновление анимации
         if self.is_shooting:
@@ -463,12 +433,11 @@ class Tower:
         pygame.draw.circle(s, (*self.color, 50), (self.range, self.range), self.range)
         screen.blit(s, (self.x - self.range, self.y - self.range))
 
-        # Рисуем спрайт башни с поворотом
+        # Рисуем спрайт башни
         if self.sprites and 0 <= self.anim_index < len(self.sprites):
             frame = self.sprites[self.anim_index]
-            rotated_frame, rotated_rect = rotate_center(frame, self.angle)
-            rect = rotated_frame.get_rect(center=(self.x, self.y))
-            screen.blit(rotated_frame, rect)
+            rect = frame.get_rect(center=(self.x, self.y))
+            screen.blit(frame, rect)
         else:
             # Если спрайтов нет — рисуем простой круг
             pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius)
@@ -621,11 +590,6 @@ def main():
     wave_cooldown = 180
     wave_cooldown_timer = wave_cooldown
 
-    # Параметры для плавного появления текста волны
-    wave_text_alpha = 0
-    wave_text_fade_in = True
-    wave_text_fade_speed = 5  # скорость изменения alpha
-
     while running:
         clock.tick(FPS)
         draw_path()
@@ -717,24 +681,11 @@ def main():
 
         if not wave_in_progress:
             wave_cooldown_timer -= 1
-            # Обновляем alpha для плавного появления текста волны
-            if wave_text_fade_in:
-                wave_text_alpha += wave_text_fade_speed
-                if wave_text_alpha >= 255:
-                    wave_text_alpha = 255
-                    wave_text_fade_in = False
-            else:
-                wave_text_alpha -= wave_text_fade_speed
-                if wave_text_alpha <= 0:
-                    wave_text_alpha = 0
-
             if wave_cooldown_timer <= 0:
                 wave_in_progress = True
                 enemies_spawned = 0
                 enemies_per_wave = 10 + (current_wave - 1) * 5
                 spawn_timer = spawn_interval
-                wave_text_alpha = 0
-                wave_text_fade_in = True
         else:
             spawn_timer += 1
 
@@ -823,11 +774,9 @@ def main():
         upgrade_info = font.render(f"RMB or LMB on tower to open menu, ESC to close menu", True, BLACK)
         screen.blit(upgrade_info, (10, 90))
 
-        # Плавное появление текста волны
-        if not wave_in_progress and wave_text_alpha > 0:
+        if not wave_in_progress:
             wave_msg_font = pygame.font.SysFont(None, 72)
             wave_msg = wave_msg_font.render(f"Волна {current_wave}", True, RED)
-            wave_msg.set_alpha(wave_text_alpha)
             screen.blit(wave_msg, (WIDTH // 2 - wave_msg.get_width() // 2, HEIGHT // 2 - wave_msg.get_height() // 2))
 
         if lives <= 0:
@@ -844,4 +793,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-исправь то что враги не стреляют и не поворачиваются, а турель поворачивается не так исправь это пожалуйстаа о меня уволят с работы
