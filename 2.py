@@ -1,4 +1,3 @@
-
 import pygame
 import math
 import sys
@@ -15,7 +14,7 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GRAY = (100, 100, 100)
 GREEN = (0, 200, 0)  # лужайка
-RED = (255, 0, 0)    # зоны башен
+RED = (255, 0, 0)  # зоны башен
 BLUE = (0, 0, 255)
 CYAN = (0, 255, 255)
 MAGENTA = (255, 0, 255)
@@ -51,7 +50,7 @@ path = [
     (510, 350),
     (590, 463),
     (510, 576),
-    (0, 576)
+    (0, 576),
 ]
 
 # Красные квадраты — места для башен (x, y, width, height)
@@ -64,8 +63,8 @@ path = [
 # ]
 
 tower_zones = [
-    pygame.Rect(42, 42, 50, 50),    # (55, 55, 50, 50)
-    pygame.Rect(180, 215, 50, 50),   # (535, 55, 50, 50)
+    pygame.Rect(42, 42, 50, 50),  # (55, 55, 50, 50)
+    pygame.Rect(180, 215, 50, 50),  # (535, 55, 50, 50)
     pygame.Rect(180, 430, 50, 50),  # (175, 295, 50, 50)
     pygame.Rect(480, 215, 50, 50),  # (415, 295, 50, 50)
     pygame.Rect(400, 430, 50, 50),  # (295, 495, 50, 50)
@@ -81,6 +80,7 @@ tower_zones = [
 # Голубой квадрат — финиш (нижний левый угол)
 finish_zone = pygame.Rect(0, 520, 80, 80)
 
+
 # Класс для описания типа башни
 class TowerType:
     def __init__(self, name, color, range_, fire_rate, damage, radius):
@@ -91,11 +91,12 @@ class TowerType:
         self.damage = damage
         self.radius = radius
 
+
 # Определяем разные типы башен
 tower_types = [
     TowerType("Стандартная", BLUE, 120, 60, 25, 20),
     TowerType("Быстрая", CYAN, 100, 20, 10, 15),
-    TowerType("Сильная", MAGENTA, 150, 90, 50, 25)
+    TowerType("Сильная", MAGENTA, 150, 90, 50, 25),
 ]
 
 # Функция для рисования лужайки, дорожки, зон башен и финиша
@@ -115,6 +116,7 @@ tower_types = [
 
 #     # Рисуем голубой квадрат — финиш
 #     pygame.draw.rect(screen, LIGHT_BLUE, finish_zone)
+
 
 # Класс врага
 class Enemy:
@@ -161,8 +163,27 @@ class Enemy:
         health_bar_width = 30
         health_bar_height = 5
         health_ratio = max(self.health / self.max_health, 0)
-        pygame.draw.rect(screen, RED, (self.x - health_bar_width // 2, self.y - self.radius - 10, health_bar_width, health_bar_height))
-        pygame.draw.rect(screen, GREEN, (self.x - health_bar_width // 2, self.y - self.radius - 10, int(health_bar_width * health_ratio), health_bar_height))
+        pygame.draw.rect(
+            screen,
+            RED,
+            (
+                self.x - health_bar_width // 2,
+                self.y - self.radius - 10,
+                health_bar_width,
+                health_bar_height,
+            ),
+        )
+        pygame.draw.rect(
+            screen,
+            GREEN,
+            (
+                self.x - health_bar_width // 2,
+                self.y - self.radius - 10,
+                int(health_bar_width * health_ratio),
+                health_bar_height,
+            ),
+        )
+
 
 # Класс башни
 class Tower:
@@ -182,7 +203,7 @@ class Tower:
         self.timer += 1
         if self.timer >= self.fire_rate:
             target = None
-            min_dist = float('inf')
+            min_dist = float("inf")
             for enemy in enemies:
                 dist = math.hypot(enemy.x - self.x, enemy.y - self.y)
                 if dist <= self.range and enemy.alive:
@@ -199,6 +220,7 @@ class Tower:
         s = pygame.Surface((self.range * 2, self.range * 2), pygame.SRCALPHA)
         pygame.draw.circle(s, (*self.color, 50), (self.range, self.range), self.range)
         screen.blit(s, (self.x - self.range, self.y - self.range))
+
 
 # Класс пули
 class Bullet:
@@ -238,6 +260,7 @@ class Bullet:
     def draw(self):
         pygame.draw.circle(screen, YELLOW, (int(self.x), int(self.y)), self.radius)
 
+
 # Основная функция
 def main():
     running = True
@@ -250,9 +273,14 @@ def main():
     lives = 10
     font = pygame.font.SysFont(None, 24)
     selected_tower_type_index = 0
-    
+
     while running:
-        screen.blit(pygame.transform.scale(pygame.image.load('background.png'), (WIDTH, HEIGHT)), (0,0))
+        screen.blit(
+            pygame.transform.scale(
+                pygame.image.load("background.png"), (WIDTH, HEIGHT)
+            ),
+            (0, 0),
+        )
         clock.tick(FPS)
         # Обработка событий
         for event in pygame.event.get():
@@ -329,12 +357,17 @@ def main():
 
         # Отображаем выбранный тип башни
         selected_type = tower_types[selected_tower_type_index]
-        tower_info = font.render(f"Selected Tower: {selected_type.name} (1-3 to change)", True, BLACK)
+        tower_info = font.render(
+            f"Selected Tower: {selected_type.name} (1-3 to change)", True, BLACK
+        )
         screen.blit(tower_info, (10, 50))
 
         if lives <= 0:
             game_over_text = font.render("Game Over! Press ESC to quit.", True, RED)
-            screen.blit(game_over_text, (WIDTH // 2 - game_over_text.get_width() // 2, HEIGHT // 2))
+            screen.blit(
+                game_over_text,
+                (WIDTH // 2 - game_over_text.get_width() // 2, HEIGHT // 2),
+            )
             pygame.display.flip()
             wait_for_exit()
             running = False
@@ -343,6 +376,7 @@ def main():
 
     pygame.quit()
     sys.exit()
+
 
 # Функция ожидания выхода после окончания игры
 def wait_for_exit():
@@ -356,6 +390,6 @@ def wait_for_exit():
                     waiting = False
         pygame.time.wait(100)
 
+
 if __name__ == "__main__":
     main()
-
