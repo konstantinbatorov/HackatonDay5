@@ -43,7 +43,7 @@ TOWER_MAX_LEVEL = 3
 
 # Создаем окно
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Tower Defence")
+pygame.display.set_caption("Защита Башни")
 
 clock = pygame.time.Clock()
 
@@ -129,12 +129,14 @@ class EnemyAnimation:
         try:
             self.sprite_sheet = pygame.image.load("terrorist.png").convert_alpha()
         except:
-            self.sprite_sheet = pygame.Surface((SPRITE_SIZE * 4, SPRITE_SIZE * 2), pygame.SRCALPHA)
-            pygame.draw.rect(self.sprite_sheet, RED, (0, 0, SPRITE_SIZE * 4, SPRITE_SIZE * 2), 1)
+            # Создаем заглушку, если нет спрайта
+            self.sprite_sheet = pygame.Surface((SPRITE_SIZE * 5, SPRITE_SIZE * 2), pygame.SRCALPHA)
+            pygame.draw.rect(self.sprite_sheet, RED, (0, 0, SPRITE_SIZE * 5, SPRITE_SIZE * 2), 1)
 
+        # Обновлено: 4 кадра ходьбы (0-3), 5 кадров смерти (4-8)
         self.animations = {
-            "walk": (0, 4),
-            "death": (4, 5)
+            "walk": (0, 4),   # start_col = 0, frame_count = 4
+            "death": (4, 5)   # start_col = 4, frame_count = 5
         }
         self.frames = {}
         self._load_frames()
@@ -144,8 +146,19 @@ class EnemyAnimation:
             frames = []
             for i in range(frame_count):
                 frame = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE), pygame.SRCALPHA)
+                # В sprite_sheet строки - это строки, столбцы - кадры
+                # В твоем коде start_col - это индекс кадра по горизонтали, а не по вертикали
+                # Поэтому исправим: берем кадры по горизонтали, строки - 0 (одна строка)
+                # В оригинале у тебя 2 строки, но в анимациях используется только строка 0
+                # Но в твоем коде start_col используется как вертикальный индекс (столбец в y)
+                # Судя по твоему коду, start_col - это вертикальный индекс (строка)
+                # Но в твоем спрайтшите 2 строки, 5 столбцов
+                # Исправим: кадры идут по горизонтали, строка зависит от анимации
+                # walk - строка 0, death - строка 1
+                # поэтому:
+                row = 0 if anim_name == "walk" else 1
                 frame.blit(self.sprite_sheet, (0, 0),
-                           (i * SPRITE_SIZE, start_col * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE))
+                           (i * SPRITE_SIZE, row * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE))
                 frames.append(frame)
             self.frames[anim_name] = frames
 
@@ -158,7 +171,13 @@ class EnemyAnimation:
     def update(self):
         self.animation_timer += 1
         if self.animation_timer >= self.animation_speed:
-            self.current_frame = (self.current_frame + 1) % len(self.frames[self.current_animation])
+            if self.current_animation == "death":
+                # При смерти анимация не циклична, останавливаемся на последнем кадре
+                if self.current_frame < len(self.frames[self.current_animation]) - 1:
+                    self.current_frame += 1
+                # Если последний кадр, не переключаем дальше
+            else:
+                self.current_frame = (self.current_frame + 1) % len(self.frames[self.current_animation])
             self.animation_timer = 0
 
     def draw(self, screen, direction_angle):
@@ -207,6 +226,7 @@ class Enemy:
         if self.dying:
             self.animation.change_animation("death")
             self.animation.update()
+            # Проверяем, дошла ли анимация смерти до конца
             if self.animation.current_animation == "death" and \
                     self.animation.current_frame == len(self.animation.frames["death"]) - 1:
                 self.death_animation_complete = True
@@ -453,7 +473,7 @@ class Tower:
                                          int(health_bar_width * health_ratio), health_bar_height))
 
         font = pygame.font.SysFont(None, 18)
-        lvl_text = font.render(f"Lv{self.level}", True, BLACK)
+        lvl_text = font.render(f"lv{self.level}", True, BLACK)
         screen.blit(lvl_text, (self.x - lvl_text.get_width() // 2, self.y - lvl_text.get_height() // 2))
 
     def take_damage(self, damage):
@@ -637,9 +657,9 @@ class TowerMenu:
         pygame.draw.rect(screen, DARK_GRAY, (self.x, self.y, self.width, self.height), border_radius=5)
         pygame.draw.rect(screen, BLACK, (self.x, self.y, self.width, self.height), 2, border_radius=5)
 
-        upgrade_text = "Upgrade"
+        upgrade_text = "Улучшить"
         if self.tower.level >= TOWER_MAX_LEVEL:
-            upgrade_text = "Max Level"
+            upgrade_text = "Макс. уровень"
             upgrade_color = DISABLED_GRAY
         else:
             cost = TOWER_UPGRADE_COST[self.tower.type_name][self.tower.level - 1]
@@ -651,12 +671,12 @@ class TowerMenu:
                                    self.buttons["upgrade"].y + (self.buttons["upgrade"].height - upgrade_surf.get_height()) // 2))
 
         sell_price = self.tower.sell_price()
-        sell_text = f"Sell ({sell_price})"
+        sell_text = f"Продать ({sell_price})"
         sell_surf = self.font.render(sell_text, True, WHITE)
 
         if not self.tower.can_sell():
             sell_color = DISABLED_GRAY
-            warning_surf = self.font.render("Too damaged to sell", True, RED)
+            warning_surf = self.font.render("Слишком повреждена", True, RED)
         else:
             sell_color = RED
             warning_surf = None
@@ -690,6 +710,36 @@ class TowerMenu:
         return None, money
 
 
+class WaveText:
+    def __init__(self, wave_number):
+        self.wave_number = wave_number
+        self.font = pygame.font.SysFont(None, 64, bold=False)
+        self.alpha = 0
+        self.max_alpha = 255
+        self.fade_in_speed = 3  # скорость появления
+        self.display_time = 120  # количество кадров отображения после появления
+        self.timer = 0
+        self.finished = False
+
+        self.text_surface = self.font.render(f"Волна {self.wave_number}", True, RED)
+        self.text_surface.set_alpha(self.alpha)
+        self.rect = self.text_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+
+    def update(self):
+        if self.alpha < self.max_alpha and self.timer == 0:
+            self.alpha += self.fade_in_speed
+            if self.alpha > self.max_alpha:
+                self.alpha = self.max_alpha
+            self.text_surface.set_alpha(self.alpha)
+        else:
+            self.timer += 1
+            if self.timer > self.display_time:
+                self.finished = True
+
+    def draw(self, screen):
+        screen.blit(self.text_surface, self.rect)
+
+
 def main():
     running = True
     enemies = []
@@ -701,7 +751,7 @@ def main():
     spawn_interval = 120
     money = START_MONEY
     lives = 10
-    font = pygame.font.SysFont(None, 24)
+    font = pygame.font.SysFont(None, 20)  # Меньший размер шрифта для HUD
     selected_tower_type_name = "Стандартная"
     tower_menu = None
 
@@ -711,6 +761,8 @@ def main():
     wave_in_progress = False
     wave_cooldown = 180
     wave_cooldown_timer = wave_cooldown
+
+    wave_text = None  # Для отображения текста новой волны
 
     while running:
         clock.tick(FPS)
@@ -748,7 +800,7 @@ def main():
                 if event.button == 1:
                     if tower_menu:
                         action, money = tower_menu.handle_event(event, money)
-                        if action in ("upgrade", "sell") and action == "sell":
+                        if action == "sell":
                             tower_menu = None
                         else:
                             mx_, my_ = event.pos
@@ -820,6 +872,9 @@ def main():
                 enemies_spawned = 0
                 enemies_per_wave = 10 + (current_wave - 1) * 5
                 spawn_timer = spawn_interval
+
+                # Создаем объект для отображения текста волны
+                wave_text = WaveText(current_wave)
         else:
             spawn_timer += 1
             spawn_interval = max(30, 120 - (current_wave - 1) * 10)
@@ -835,6 +890,13 @@ def main():
                 wave_in_progress = False
                 current_wave += 1
                 wave_cooldown_timer = wave_cooldown
+
+        # Обновление текста волны
+        if wave_text:
+            wave_text.update()
+            wave_text.draw(screen)
+            if wave_text.finished:
+                wave_text = None
 
         # Обновление врагов
         for enemy in enemies[:]:
@@ -909,24 +971,44 @@ def main():
         if tower_menu:
             tower_menu.draw(screen)
 
-        # HUD
-        money_text = font.render(f"Money: {money}", True, BLACK)
-        lives_text = font.render(f"Lives: {lives}", True, BLACK)
-        wave_text = font.render(f"Wave: {current_wave}", True, BLACK)
-        screen.blit(money_text, (10, 10))
-        screen.blit(lives_text, (10, 30))
-        screen.blit(wave_text, (10, 50))
+        # HUD - рисуем в верхнем правом углу с полупрозрачным фоном
+        hud_padding = 8
+        hud_margin = 10
+        hud_lines = [
+            f"Деньги: {money}",
+            f"Жизни: {lives}",
+            f"Волна: {current_wave}",
+            f"Выбранная башня: {selected_tower_type_name} ({TOWER_BASE_COST[selected_tower_type_name]}$)",
+            "Клавиши: 1-3 для выбора башни",
+            "ЛКМ/ПКМ по башне: меню",
+            "ESC: закрыть меню/выйти",
+        ]
 
-        base_cost = TOWER_BASE_COST[selected_tower_type_name]
-        tower_info = font.render(
-            f"Selected Tower: {selected_tower_type_name} (1-3 to change), Cost: {base_cost}", True, BLACK)
-        screen.blit(tower_info, (10, 70))
-        upgrade_info = font.render(
-            f"RMB or LMB on tower to open menu, ESC to close menu", True, BLACK)
-        screen.blit(upgrade_info, (10, 90))
+        # Подсчет размеров
+        max_width = 0
+        line_height = font.get_height()
+        for line in hud_lines:
+            w, _ = font.size(line)
+            if w > max_width:
+                max_width = w
+        hud_width = max_width + hud_padding * 2
+        hud_height = line_height * len(hud_lines) + hud_padding * 2
+
+        hud_x = WIDTH - hud_width - hud_margin
+        hud_y = hud_margin
+
+        # Фон HUD (полупрозрачный)
+        hud_surface = pygame.Surface((hud_width, hud_height), pygame.SRCALPHA)
+        hud_surface.fill((30, 30, 30, 180))  # Темный полупрозрачный фон
+        screen.blit(hud_surface, (hud_x, hud_y))
+
+        # Рисуем строки текста
+        for i, line in enumerate(hud_lines):
+            text_surf = font.render(line, True, WHITE)
+            screen.blit(text_surf, (hud_x + hud_padding, hud_y + hud_padding + i * line_height))
 
         if lives <= 0:
-            game_over_text = font.render("Game Over! Press ESC to quit.", True, RED)
+            game_over_text = font.render("Игра окончена! Нажмите ESC для выхода.", True, RED)
             screen.blit(game_over_text, (WIDTH // 2 - game_over_text.get_width() // 2, HEIGHT // 2))
             pygame.display.flip()
             wait_for_exit()
