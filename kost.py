@@ -20,21 +20,12 @@ class Object(sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
+
     def reset(self):
         window.blit(self.image, (self.rect.x, self.rect.y))
 
 
-
-
-
-
-
-
-
-
 print()
-
-
 
 
 game = True
