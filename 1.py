@@ -350,7 +350,7 @@ class Tower:
         self.range, self.fire_rate, self.damage, self.radius = get_tower_stats(tower_type_name, self.level)
         self.timer = 0
         self.color = tower_types[tower_type_name].color
-        self.max_health = 100 + 50 * (self.level - 1)
+        self.max_health = 200 + 50 * (self.level - 1)
         self.health = self.max_health
         self.alive = True
 
