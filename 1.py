@@ -1,7 +1,6 @@
 import pygame
 import math
 import sys
-import os
 import random
 
 # Инициализация Pygame
@@ -9,20 +8,20 @@ pygame.init()
 
 # Константы
 WIDTH, HEIGHT = 640, 640
-FPS =400
+FPS = 60
 
 # Цвета
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GRAY = (100, 100, 100)
-GREEN = (0, 200, 0)  # лужайка
-RED = (255, 0, 0)  # зоны башен и надпись волны
+GREEN = (0, 200, 0)
+RED = (255, 0, 0)
 BLUE = (0, 0, 255)
 CYAN = (0, 255, 255)
 MAGENTA = (255, 0, 255)
 YELLOW = (255, 255, 0)
-LIGHT_BLUE = (100, 200, 255)  # финиш
-PATH_COLOR = (245, 245, 245)  # светло-серый для дорожки
+LIGHT_BLUE = (100, 200, 255)
+PATH_COLOR = (245, 245, 245)
 DARK_GRAY = (50, 50, 50)
 DISABLED_GRAY = (80, 80, 80)
 
@@ -30,16 +29,20 @@ SPRITE_SIZE = 50
 ANIMATION_SPEED = 8
 
 # Настройки игры
-START_MONEY = 9999999999999999
+START_MONEY = 200
 ENEMY_BASE_HEALTH = 100
 ENEMY_BASE_SPEED = 1.0
 BULLET_SPEED = 5
 ENEMY_BULLET_SPEED = 3
-TOWER_BASE_COST = {"Стандартная": 100, "Быстрая": 150, "Сильная": 200}
+TOWER_BASE_COST = {
+    "Стандартная": 100,
+    "Быстрая": 150,
+    "Сильная": 200
+}
 TOWER_UPGRADE_COST = {
     "Стандартная": [100, 150],
     "Быстрая": [100, 100],
-    "Сильная": [150, 200],
+    "Сильная": [150, 200]
 }
 TOWER_MAX_LEVEL = 3
 
@@ -58,7 +61,7 @@ path = [
     (510, 350),
     (590, 463),
     (510, 576),
-    (0, 576),
+    (0, 576)
 ]
 
 # Места для башен
@@ -75,11 +78,10 @@ finish_zone = pygame.Rect(0, 520, 80, 80)
 
 # Фон
 try:
-    background_img = pygame.image.load("background.png")
+    background_img = pygame.image.load('background.png')
     background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
 except:
     background_img = None
-
 
 class TowerType:
     def __init__(self, name, color, range_, fire_rate, damage, radius):
@@ -90,22 +92,19 @@ class TowerType:
         self.damage = damage
         self.radius = radius
 
-
 tower_types = {
     "Стандартная": TowerType("Стандартная", BLUE, 120, 60, 25, 20),
     "Быстрая": TowerType("Быстрая", CYAN, 100, 20, 10, 15),
-    "Сильная": TowerType("Сильная", MAGENTA, 150, 90, 50, 25),
+    "Сильная": TowerType("Сильная", MAGENTA, 150, 90, 50, 25)
 }
-
 
 def get_tower_stats(tower_type_name, level):
     base = tower_types[tower_type_name]
     range_ = base.range + (level - 1) * 10
     damage = int(base.damage * (1 + 0.5 * (level - 1)))
     fire_rate = max(5, int(base.fire_rate / (1 + 0.5 * (level - 1))))
-    radius = base.radius + (level - 1) * 5
+    radius = base.radius + (level -1) * 5
     return range_, fire_rate, damage, radius
-
 
 def draw_path():
     if background_img:
@@ -120,135 +119,6 @@ def draw_path():
             pygame.draw.rect(screen, RED, rect)
         pygame.draw.rect(screen, LIGHT_BLUE, finish_zone)
 
-
-class AnimSprite:
-    def __init__(self, sprite_type):
-        self.x = 0
-        self.y = 0
-        self.sprite_type = sprite_type
-        self.current_animation = "stance"
-        self.current_frame = 0
-        self.animation_timer = 0
-        self.facing_right = True
-
-        try:
-            self.sprite_sheet = pygame.image.load(f"{sprite_type}.png").convert_alpha()
-            # Проверяем, что изображение достаточно большое
-            if (
-                self.sprite_sheet.get_width() < SPRITE_SIZE
-                or self.sprite_sheet.get_height() < SPRITE_SIZE
-            ):
-                raise ValueError("Sprite sheet too small")
-        except (pygame.error, ValueError) as e:
-            print(f"Error loading sprite: {e}. Using fallback sprite.")
-            self.sprite_sheet = pygame.Surface(
-                (SPRITE_SIZE, SPRITE_SIZE), pygame.SRCALPHA
-            )
-            pygame.draw.circle(
-                self.sprite_sheet,
-                RED,
-                (SPRITE_SIZE // 2, SPRITE_SIZE // 2),
-                SPRITE_SIZE // 2,
-            )
-
-        if sprite_type == "terrorist":
-            self.animations = [("run", 4), ("stance", 1), ("die", 5)]
-        else:
-            self.animations = [("run", 4), ("die", 5)]
-
-        self.animation_frames = {}
-        self._load_all_animations()
-
-    def _load_all_animations(self):
-        sheet_width = self.sprite_sheet.get_width()
-        sheet_height = self.sprite_sheet.get_height()
-        frames_per_row = sheet_width // SPRITE_SIZE
-        frame_number = 0
-
-        for animation_name, frame_count in self.animations:
-            frames = []
-            for _ in range(frame_count):
-                column = frame_number % frames_per_row
-                row = frame_number // frames_per_row
-
-                # Проверяем границы перед созданием subsurface
-                if (column + 1) * SPRITE_SIZE > sheet_width or (
-                    row + 1
-                ) * SPRITE_SIZE > sheet_height:
-                    # Создаем пустой кадр, если выходим за границы
-                    frame = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE), pygame.SRCALPHA)
-                    pygame.draw.rect(
-                        frame, (255, 0, 255), (0, 0, SPRITE_SIZE, SPRITE_SIZE), 1
-                    )  # Фиолетовая рамка для отладки
-                else:
-                    frame_rect = pygame.Rect(
-                        column * SPRITE_SIZE,
-                        row * SPRITE_SIZE,
-                        SPRITE_SIZE,
-                        SPRITE_SIZE,
-                    )
-                    try:
-                        frame = self.sprite_sheet.subsurface(frame_rect)
-                    except ValueError:
-                        frame = pygame.Surface(
-                            (SPRITE_SIZE, SPRITE_SIZE), pygame.SRCALPHA
-                        )
-                        pygame.draw.rect(
-                            frame, (255, 0, 255), (0, 0, SPRITE_SIZE, SPRITE_SIZE), 1
-                        )
-
-                frames.append(frame)
-                frame_number += 1
-            self.animation_frames[animation_name] = frames
-
-    def change_animation(self, new_animation):
-        if (
-            self.current_animation == "die"
-            and self.current_frame < len(self.animation_frames["die"]) - 1
-        ):
-            return
-
-        if (
-            new_animation in self.animation_frames
-            and new_animation != self.current_animation
-        ):
-            self.current_animation = new_animation
-            self.current_frame = 0
-            self.animation_timer = 0
-
-    def update(self):
-        if (
-            self.current_animation == "die"
-            and self.current_frame >= len(self.animation_frames["die"]) - 1
-        ):
-            return
-
-        self.animation_timer += 1
-        if self.animation_timer >= ANIMATION_SPEED:
-            frames_in_animation = len(self.animation_frames[self.current_animation])
-            self.current_frame = (self.current_frame + 1) % frames_in_animation
-            if (
-                self.current_animation == "die"
-                and self.current_frame >= frames_in_animation - 1
-            ):
-                self.current_frame = frames_in_animation - 1
-            self.animation_timer = 0
-
-    def draw(self, screen):
-        if (
-            self.current_animation not in self.animation_frames
-            or self.current_frame >= len(self.animation_frames[self.current_animation])
-        ):
-            return
-
-        current_image = self.animation_frames[self.current_animation][
-            self.current_frame
-        ]
-        if not self.facing_right:
-            current_image = pygame.transform.flip(current_image, True, False)
-        screen.blit(current_image, (self.x, self.y))
-
-
 class Enemy:
     def __init__(self, health, speed):
         self.path = path
@@ -259,8 +129,6 @@ class Enemy:
         self.max_health = health
         self.radius = 15
         self.alive = True
-        self.dying = False
-        self.death_animation_complete = False
         self.attack_cooldown = 90
         self.attack_timer = random.randint(0, self.attack_cooldown)
         self.attack_damage = 5 + random.randint(-2, 2)
@@ -269,51 +137,42 @@ class Enemy:
         self.attack_effect_timer = 0
         self.burst_count = 0
         self.burst_delay = 0
-
-        self.sprite = AnimSprite("terrorist")
-        self.sprite.x = self.x - SPRITE_SIZE // 2
-        self.sprite.y = self.y - SPRITE_SIZE // 2
-        self.facing_right = True
+        self.direction = 0
+        self.shooting_direction = 0
+        self.is_attacking = False
+        
+        # Анимация
+        self.animation = EnemyAnimation()
+        self.animation.x = self.x
+        self.animation.y = self.y
+        self.animation.change_animation("walk")
 
     def update(self, towers, enemy_bullets):
-        # Если враг умирает, обновляем анимацию смерти
-        if self.dying:
-            self.sprite.change_animation("die")
-            self.sprite.update()
-            # Проверяем, завершилась ли анимация смерти
-            if (self.sprite.current_animation == "die") and (
-                self.sprite.current_frame
-                == len(self.sprite.animation_frames["die"]) - 1
-            ):
-                self.death_animation_complete = True
-                self.alive = False
-            return False, False  # неактивен, не достиг финиша
+        self.attack_timer += 1
+        if self.attack_effect_timer > 0:
+            self.attack_effect_timer -= 1
+            
+        if self.burst_delay > 0:
+            self.burst_delay -= 1
 
-        # Если здоровье <= 0, запускаем анимацию смерти
-        if self.health <= 0 and not self.dying:
-            self.dying = True
-            self.sprite.change_animation("die")
-            self.sprite.current_frame = 0
-            return True, False  # активен (уже умирает), не достиг финиша
-
-        # Проверяем, достиг ли конец пути
         if self.path_pos + 1 >= len(self.path):
             if finish_zone.collidepoint(self.x, self.y):
                 self.alive = False
-                return False, True  # неактивен, достиг финиша
+                return False
             else:
                 self.alive = False
-                return False, False  # неактивен, не достиг финиша
-
+                return False
+        
         target_x, target_y = self.path[self.path_pos + 1]
         vec_x = target_x - self.x
         vec_y = target_y - self.y
         dist = math.hypot(vec_x, vec_y)
-
-        if vec_x != 0:
-            self.facing_right = vec_x > 0
-        self.sprite.facing_right = self.facing_right
-
+        
+        # Обновляем направление движения
+        if dist > 0:
+            self.direction = math.atan2(vec_y, vec_x)
+            self.is_attacking = False
+        
         if dist == 0:
             self.path_pos += 1
         else:
@@ -323,29 +182,17 @@ class Enemy:
             self.y += move_y
             if math.hypot(target_x - self.x, target_y - self.y) < self.speed:
                 self.path_pos += 1
-
-        self.sprite.x = self.x - SPRITE_SIZE // 2
-        self.sprite.y = self.y - SPRITE_SIZE // 2
-
-        if dist > 0:
-            self.sprite.change_animation("run")
-        else:
-            self.sprite.change_animation("stance")
-        self.sprite.update()
-
-        if (
-            self.attack_timer >= self.attack_cooldown
-            and self.burst_count < 3
-            and self.burst_delay <= 0
-        ):
-            if (
-                self.target is None
-                or not self.target.alive
-                or math.hypot(self.target.x - self.x, self.target.y - self.y)
-                > self.attack_range
-            ):
+        
+        # Обновление позиции анимации
+        self.animation.x = self.x
+        self.animation.y = self.y
+        
+        # Очередь из 3 выстрелов
+        if self.attack_timer >= self.attack_cooldown and self.burst_count < 3 and self.burst_delay <= 0:
+            if (self.target is None or not self.target.alive or 
+                math.hypot(self.target.x - self.x, self.target.y - self.y) > self.attack_range):
                 self.target = None
-                min_dist = float("inf")
+                min_dist = float('inf')
                 for tower in towers:
                     if not tower.alive:
                         continue
@@ -355,66 +202,303 @@ class Enemy:
                         self.target = tower
 
             if self.target:
-                enemy_bullets.append(
-                    EnemyBullet(self.x, self.y, self.target, self.attack_damage)
-                )
+                # Обновляем направление стрельбы
+                dx = self.target.x - self.x
+                dy = self.target.y - self.y
+                self.shooting_direction = math.atan2(dy, dx)
+                self.is_attacking = True
+                
+                enemy_bullets.append(EnemyBullet(self.x, self.y, self.target, self.attack_damage))
                 self.attack_effect_timer = 5
                 self.burst_count += 1
                 self.burst_delay = 5
-
+                
                 if self.burst_count >= 3:
                     self.attack_timer = 0
                     self.burst_count = 0
+                    self.is_attacking = False
 
-        self.attack_timer += 1
-        if self.attack_effect_timer > 0:
-            self.attack_effect_timer -= 1
-
-        if self.burst_delay > 0:
-            self.burst_delay -= 1
-
-        return True, False  # враг жив и не достиг финиша
-
+        # Обновление анимации
+        self.animation.update()
+        
+        return True
+    
     def draw(self):
-        self.sprite.draw(screen)
+        # Рисуем анимацию с учетом направления
+        if self.is_attacking:
+            # При атаке смотрим на башню
+            self.animation.draw(screen, self.shooting_direction)
+        else:
+            # При движении смотрим по направлению движения
+            self.animation.draw(screen, self.direction)
+        
+        # Эффект выстрела
+        if self.attack_effect_timer > 0:
+            s = pygame.Surface((self.radius*4, self.radius*4), pygame.SRCALPHA)
+            alpha = 150 * self.attack_effect_timer / 10
+            pygame.draw.circle(s, (255, 255, 0, alpha), (self.radius*2, self.radius*2), self.radius*2)
+            screen.blit(s, (int(self.x - self.radius*2), int(self.y - self.radius*2)))
 
+        # Полоска здоровья
         health_bar_width = 30
         health_bar_height = 5
         health_ratio = max(self.health / self.max_health, 0)
-        pygame.draw.rect(
-            screen,
-            RED,
-            (
-                self.x - health_bar_width // 2,
-                self.y - self.radius - 10,
-                health_bar_width,
-                health_bar_height,
-            ),
-        )
-        pygame.draw.rect(
-            screen,
-            GREEN,
-            (
-                self.x - health_bar_width // 2,
-                self.y - self.radius - 10,
-                int(health_bar_width * health_ratio),
-                health_bar_height,
-            ),
-        )
+        pygame.draw.rect(screen, RED, (self.x - health_bar_width // 2, self.y - self.radius - 10, 
+                                       health_bar_width, health_bar_height))
+        pygame.draw.rect(screen, GREEN, (self.x - health_bar_width // 2, self.y - self.radius - 10, 
+                                         int(health_bar_width * health_ratio), health_bar_height))
 
-        if self.attack_effect_timer > 0:
-            s = pygame.Surface((self.radius * 4, self.radius * 4), pygame.SRCALPHA)
-            alpha = 150 * self.attack_effect_timer / 10
-            pygame.draw.circle(
-                s,
-                (255, 255, 0, alpha),
-                (self.radius * 2, self.radius * 2),
-                self.radius * 2,
-            )
-            screen.blit(
-                s, (int(self.x - self.radius * 2), int(self.y - self.radius * 2))
-            )
+class EnemyAnimation:
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+        
+        # Анимация
+        self.current_animation = "walk"
+        self.current_frame = 0
+        self.animation_timer = 0
+        self.animation_speed = ANIMATION_SPEED
+        
+        # Загрузка спрайт-листа
+        try:
+            self.sprite_sheet = pygame.image.load("terrorist.png").convert_alpha()
+        except:
+            # Если файл не найден, создаем заглушку
+            self.sprite_sheet = pygame.Surface((SPRITE_SIZE*4, SPRITE_SIZE*2), pygame.SRCALPHA)
+            pygame.draw.rect(self.sprite_sheet, RED, (0, 0, SPRITE_SIZE*4, SPRITE_SIZE*2), 1)
+        
+        # Конфигурация анимаций
+        self.animations = {
+            "walk": (0, 4),
+            "death": (4, 5)
+        }
+        
+        # Хранилище кадров
+        self.frames = {}
+        self._load_frames()
+    
+    def _load_frames(self):
+        """Загружает все кадры из спрайт-листа"""
+        for anim_name, (start_col, frame_count) in self.animations.items():
+            frames = []
+            for i in range(frame_count):
+                frame = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE), pygame.SRCALPHA)
+                frame.blit(self.sprite_sheet, (0, 0), 
+                          (i * SPRITE_SIZE, start_col * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE))
+                frames.append(frame)
+            self.frames[anim_name] = frames
+    
+    def change_animation(self, new_animation):
+        if new_animation != self.current_animation and new_animation in self.frames:
+            self.current_animation = new_animation
+            self.current_frame = 0
+            self.animation_timer = 0
+    
+    def update(self):
+        self.animation_timer += 1
+        if self.animation_timer >= self.animation_speed:
+            self.current_frame = (self.current_frame + 1) % len(self.frames[self.current_animation])
+            self.animation_timer = 0
+    
+    def draw(self, screen, direction_angle):
+        """Рисует врага с учетом угла направления (в радианах)"""
+        if self.current_animation not in self.frames or not self.frames[self.current_animation]:
+            return
+            
+        frame = self.frames[self.current_animation][self.current_frame]
+        
+        # Конвертируем радианы в градусы и поворачиваем спрайт
+        # Учитываем, что спрайт изначально смотрит вправо (0 градусов)
+        angle = math.degrees(direction_angle)
+        rotated_frame = pygame.transform.rotate(frame, -angle)  # Отрицательный угол для правильного поворота
+        
+        screen.blit(rotated_frame, (self.x - rotated_frame.get_width() // 2, 
+                                  self.y - rotated_frame.get_height() // 2))
 
+class TowerAnimation:
+    def __init__(self, tower_type):
+        self.x = 0
+        self.y = 0
+        self.tower_type = tower_type
+        self.angle = 0
+        self.target_angle = 0
+        self.rotation_speed = 5
+        
+        # Анимация
+        self.current_animation = "stance"
+        self.current_frame = 0
+        self.animation_timer = 0
+        self.animation_speed = ANIMATION_SPEED
+        
+        # Загрузка спрайт-листа
+        try:
+            self.sprite_sheet = pygame.image.load(f"{tower_type}.png").convert_alpha()
+        except:
+            self.sprite_sheet = pygame.Surface((SPRITE_SIZE*5, SPRITE_SIZE), pygame.SRCALPHA)
+            pygame.draw.rect(self.sprite_sheet, BLUE if tower_type == "standart" else CYAN if tower_type == "speed" else MAGENTA, 
+                           (0, 0, SPRITE_SIZE*5, SPRITE_SIZE), 1)
+        
+        # Конфигурация анимаций
+        self.animations = {
+            "shoot": (0, 4),
+            "stance": (4, 1)
+        }
+        
+        # Хранилище кадров
+        self.frames = {}
+        self._load_frames()
+    
+    def _load_frames(self):
+        for anim_name, (start_col, frame_count) in self.animations.items():
+            frames = []
+            for i in range(frame_count):
+                frame = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE), pygame.SRCALPHA)
+                frame.blit(self.sprite_sheet, (0, 0), 
+                          ((start_col + i) * SPRITE_SIZE, 0, SPRITE_SIZE, SPRITE_SIZE))
+                frames.append(frame)
+            self.frames[anim_name] = frames
+    
+    def rotate_towards(self, target_x, target_y):
+        dx = target_x - self.x
+        dy = target_y - self.y
+        self.target_angle = math.degrees(math.atan2(-dy, dx))
+    
+    def change_animation(self, new_animation):
+        if new_animation != self.current_animation and new_animation in self.frames:
+            self.current_animation = new_animation
+            self.current_frame = 0
+            self.animation_timer = 0
+    
+    def update(self):
+        # Плавный поворот к цели
+        angle_diff = (self.target_angle - self.angle + 180) % 360 - 180
+        if abs(angle_diff) > self.rotation_speed:
+            self.angle += self.rotation_speed if angle_diff > 0 else -self.rotation_speed
+        else:
+            self.angle = self.target_angle
+        
+        # Обновление анимации
+        self.animation_timer += 1
+        if self.animation_timer >= self.animation_speed:
+            self.current_frame = (self.current_frame + 1) % len(self.frames[self.current_animation])
+            self.animation_timer = 0
+    
+    def draw(self, screen):
+        if self.current_animation not in self.frames or not self.frames[self.current_animation]:
+            return
+            
+        frame = self.frames[self.current_animation][self.current_frame]
+        rotated_frame = pygame.transform.rotate(frame, self.angle)
+        screen.blit(rotated_frame, (self.x - rotated_frame.get_width() // 2, 
+                                   self.y - rotated_frame.get_height() // 2))
+
+class Tower:
+    def __init__(self, x, y, zone_rect, tower_type_name):
+        self.x = x
+        self.y = y
+        self.zone_rect = zone_rect
+        self.type_name = tower_type_name
+        self.level = 1
+        self.range, self.fire_rate, self.damage, self.radius = get_tower_stats(tower_type_name, self.level)
+        self.timer = 0
+        self.color = tower_types[tower_type_name].color
+        self.max_health = 100 + 50 * (self.level - 1)
+        self.health = self.max_health
+        self.alive = True
+        
+        # Анимация
+        sprite_name = "standart" if tower_type_name == "Стандартная" else "speed" if tower_type_name == "Быстрая" else "strong"
+        self.animation = TowerAnimation(sprite_name)
+        self.animation.x = self.x
+        self.animation.y = self.y
+        self.shooting = False
+        self.shoot_timer = 0
+
+    def update(self, enemies, bullets):
+        if not self.alive:
+            return
+        
+        self.timer += 1
+        self.shoot_timer += 1
+        
+        if self.shooting and self.shoot_timer > 10:
+            self.shooting = False
+            self.animation.change_animation("stance")
+        
+        # Поиск цели
+        target = None
+        min_dist = float('inf')
+        for enemy in enemies:
+            dist = math.hypot(enemy.x - self.x, enemy.y - self.y)
+            if dist <= self.range and enemy.alive:
+                if dist < min_dist:
+                    min_dist = dist
+                    target = enemy
+        
+        # Плавный поворот к цели
+        if target:
+            self.animation.rotate_towards(target.x, target.y)
+        
+        if self.timer >= self.fire_rate and target:
+            bullet = Bullet(self.x, self.y, target, self.damage)
+            bullets.append(bullet)
+            self.timer = 0
+            self.shooting = True
+            self.shoot_timer = 0
+            self.animation.change_animation("shoot")
+        
+        self.animation.update()
+
+    def draw(self):
+        if not self.alive:
+            return
+        
+        self.animation.draw(screen)
+        
+        # Радиус действия
+        s = pygame.Surface((self.range * 2, self.range * 2), pygame.SRCALPHA)
+        pygame.draw.circle(s, (*self.color, 50), (self.range, self.range), self.range)
+        screen.blit(s, (self.x - self.range, self.y - self.range))
+
+        # Полоска здоровья
+        health_bar_width = 40
+        health_bar_height = 6
+        health_ratio = max(self.health / self.max_health, 0)
+        pygame.draw.rect(screen, RED, (self.x - health_bar_width // 2, self.y + SPRITE_SIZE//2 + 5, 
+                                     health_bar_width, health_bar_height))
+        pygame.draw.rect(screen, GREEN, (self.x - health_bar_width // 2, self.y + SPRITE_SIZE//2 + 5, 
+                                       int(health_bar_width * health_ratio), health_bar_height))
+
+        # Уровень башни
+        font = pygame.font.SysFont(None, 18)
+        lvl_text = font.render(f"Lv{self.level}", True, BLACK)
+        screen.blit(lvl_text, (self.x - lvl_text.get_width() // 2, self.y - lvl_text.get_height() // 2))
+
+    def take_damage(self, damage):
+        self.health -= damage
+        if self.health <= 0:
+            self.alive = False
+
+    def upgrade(self, money):
+        if self.level >= TOWER_MAX_LEVEL:
+            return False, money
+        cost = TOWER_UPGRADE_COST[self.type_name][self.level - 1]
+        if money >= cost:
+            self.level += 1
+            self.range, self.fire_rate, self.damage, self.radius = get_tower_stats(self.type_name, self.level)
+            self.max_health = 100 + 50 * (self.level - 1)
+            self.health = self.max_health
+            money -= cost
+            return True, money
+        return False, money
+
+    def sell_price(self):
+        base_cost = TOWER_BASE_COST[self.type_name]
+        upgrades_cost = sum(TOWER_UPGRADE_COST[self.type_name][:self.level - 1]) if self.level > 1 else 0
+        return (base_cost + upgrades_cost) // 2
+
+    def can_sell(self):
+        return self.health >= self.max_health * 0.25
 
 class Corpse:
     def __init__(self, x, y, radius, color, lifetime=180):
@@ -432,13 +516,10 @@ class Corpse:
             self.alive = False
 
     def draw(self):
-        s = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+        s = pygame.Surface((self.radius*2, self.radius*2), pygame.SRCALPHA)
         alpha = max(0, 150 - int(150 * (self.timer / self.lifetime)))
-        pygame.draw.circle(
-            s, (*self.color[:3], alpha), (self.radius, self.radius), self.radius
-        )
+        pygame.draw.circle(s, (*self.color[:3], alpha), (self.radius, self.radius), self.radius)
         screen.blit(s, (int(self.x - self.radius), int(self.y - self.radius)))
-
 
 class Bullet:
     def __init__(self, x, y, target, damage):
@@ -481,7 +562,6 @@ class Bullet:
     def draw(self):
         pygame.draw.circle(screen, YELLOW, (int(self.x), int(self.y)), self.radius)
 
-
 class EnemyBullet:
     def __init__(self, x, y, target, damage):
         self.x = x
@@ -501,26 +581,26 @@ class EnemyBullet:
         if not self.target.alive:
             self.alive = False
             return
-
+        
         self.trail.append((self.x, self.y))
         if len(self.trail) > self.max_trail:
             self.trail.pop(0)
-
+        
         vec_x = self.target.x - self.x
         vec_y = self.target.y - self.y
         dist = math.hypot(vec_x, vec_y)
-
+        
         if dist < self.speed:
             self.hit_target()
             return
-
+        
         if dist > 0:
             spread = 0.2
             move_x = (vec_x / dist) * self.speed + random.uniform(-spread, spread)
             move_y = (vec_y / dist) * self.speed + random.uniform(-spread, spread)
             self.x += move_x
             self.y += move_y
-
+        
         self.life_timer += 1
         if self.life_timer > self.max_life:
             self.alive = False
@@ -535,130 +615,16 @@ class EnemyBullet:
         for i, (tx, ty) in enumerate(self.trail):
             alpha = int(255 * (i / len(self.trail)))
             radius = int(self.radius * (i / len(self.trail)))
-            s = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            s = pygame.Surface((radius*2, radius*2), pygame.SRCALPHA)
             pygame.draw.circle(s, (*self.color, alpha), (radius, radius), radius)
             screen.blit(s, (int(tx - radius), int(ty - radius)))
-
+        
         pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
-
+        
         if self.life_timer < 5:
-            s = pygame.Surface((self.radius * 4, self.radius * 4), pygame.SRCALPHA)
-            pygame.draw.circle(
-                s,
-                (255, 200, 100, 150),
-                (self.radius * 2, self.radius * 2),
-                self.radius * 2,
-            )
-            screen.blit(
-                s, (int(self.x - self.radius * 2), int(self.y - self.radius * 2))
-            )
-
-
-class Tower:
-    def __init__(self, x, y, zone_rect, tower_type_name):
-        self.x = x
-        self.y = y
-        self.zone_rect = zone_rect
-        self.type_name = tower_type_name
-        self.level = 1
-        self.range, self.fire_rate, self.damage, self.radius = get_tower_stats(
-            tower_type_name, self.level
-        )
-        self.timer = 0
-        self.color = tower_types[tower_type_name].color
-        self.max_health = 100 + 50 * (self.level - 1)
-        self.health = self.max_health
-        self.alive = True
-
-    def update(self, enemies, bullets):
-        if not self.alive:
-            return
-        self.timer += 1
-        if self.timer >= self.fire_rate:
-            target = None
-            min_dist = float("inf")
-            for enemy in enemies:
-                dist = math.hypot(enemy.x - self.x, enemy.y - self.y)
-                if dist <= self.range and enemy.alive:
-                    if dist < min_dist:
-                        min_dist = dist
-                        target = enemy
-            if target:
-                bullet = Bullet(self.x, self.y, target, self.damage)
-                bullets.append(bullet)
-                self.timer = 0
-
-    def draw(self):
-        if not self.alive:
-            return
-        pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius)
-        s = pygame.Surface((self.range * 2, self.range * 2), pygame.SRCALPHA)
-        pygame.draw.circle(s, (*self.color, 50), (self.range, self.range), self.range)
-        screen.blit(s, (self.x - self.range, self.y - self.range))
-
-        health_bar_width = 40
-        health_bar_height = 6
-        health_ratio = max(self.health / self.max_health, 0)
-        pygame.draw.rect(
-            screen,
-            RED,
-            (
-                self.x - health_bar_width // 2,
-                self.y + self.radius + 5,
-                health_bar_width,
-                health_bar_height,
-            ),
-        )
-        pygame.draw.rect(
-            screen,
-            GREEN,
-            (
-                self.x - health_bar_width // 2,
-                self.y + self.radius + 5,
-                int(health_bar_width * health_ratio),
-                health_bar_height,
-            ),
-        )
-
-        font = pygame.font.SysFont(None, 18)
-        lvl_text = font.render(f"Lv{self.level}", True, BLACK)
-        screen.blit(
-            lvl_text,
-            (self.x - lvl_text.get_width() // 2, self.y - lvl_text.get_height() // 2),
-        )
-
-    def take_damage(self, damage):
-        self.health -= damage
-        if self.health <= 0:
-            self.alive = False
-
-    def upgrade(self, money):
-        if self.level >= TOWER_MAX_LEVEL:
-            return False, money
-        cost = TOWER_UPGRADE_COST[self.type_name][self.level - 1]
-        if money >= cost:
-            self.level += 1
-            self.range, self.fire_rate, self.damage, self.radius = get_tower_stats(
-                self.type_name, self.level
-            )
-            self.max_health = 100 + 50 * (self.level - 1)
-            self.health = self.max_health
-            money -= cost
-            return True, money
-        return False, money
-
-    def sell_price(self):
-        base_cost = TOWER_BASE_COST[self.type_name]
-        upgrades_cost = (
-            sum(TOWER_UPGRADE_COST[self.type_name][: self.level - 1])
-            if self.level > 1
-            else 0
-        )
-        return (base_cost + upgrades_cost) // 2
-
-    def can_sell(self):
-        return self.health >= self.max_health * 0.25
-
+            s = pygame.Surface((self.radius*4, self.radius*4), pygame.SRCALPHA)
+            pygame.draw.circle(s, (255, 200, 100, 150), (self.radius*2, self.radius*2), self.radius*2)
+            screen.blit(s, (int(self.x - self.radius*2), int(self.y - self.radius*2)))
 
 class TowerMenu:
     def __init__(self, tower):
@@ -677,27 +643,13 @@ class TowerMenu:
 
         self.font = pygame.font.SysFont(None, 20)
         self.buttons = {
-            "upgrade": pygame.Rect(
-                self.x + self.padding,
-                self.y + self.padding,
-                self.width - 2 * self.padding,
-                30,
-            ),
-            "sell": pygame.Rect(
-                self.x + self.padding, self.y + 35, self.width - 2 * self.padding, 30
-            ),
+            "upgrade": pygame.Rect(self.x + self.padding, self.y + self.padding, self.width - 2 * self.padding, 30),
+            "sell": pygame.Rect(self.x + self.padding, self.y + 35, self.width - 2 * self.padding, 30)
         }
 
     def draw(self, screen):
-        pygame.draw.rect(
-            screen,
-            DARK_GRAY,
-            (self.x, self.y, self.width, self.height),
-            border_radius=5,
-        )
-        pygame.draw.rect(
-            screen, BLACK, (self.x, self.y, self.width, self.height), 2, border_radius=5
-        )
+        pygame.draw.rect(screen, DARK_GRAY, (self.x, self.y, self.width, self.height), border_radius=5)
+        pygame.draw.rect(screen, BLACK, (self.x, self.y, self.width, self.height), 2, border_radius=5)
 
         upgrade_text = "Upgrade"
         if self.tower.level >= TOWER_MAX_LEVEL:
@@ -708,18 +660,9 @@ class TowerMenu:
             upgrade_text += f" ({cost})"
             upgrade_color = BLUE
         upgrade_surf = self.font.render(upgrade_text, True, WHITE)
-        pygame.draw.rect(
-            screen, upgrade_color, self.buttons["upgrade"], border_radius=3
-        )
-        screen.blit(
-            upgrade_surf,
-            (
-                self.buttons["upgrade"].x
-                + (self.buttons["upgrade"].width - upgrade_surf.get_width()) // 2,
-                self.buttons["upgrade"].y
-                + (self.buttons["upgrade"].height - upgrade_surf.get_height()) // 2,
-            ),
-        )
+        pygame.draw.rect(screen, upgrade_color, self.buttons["upgrade"], border_radius=3)
+        screen.blit(upgrade_surf, (self.buttons["upgrade"].x + (self.buttons["upgrade"].width - upgrade_surf.get_width()) // 2,
+                                   self.buttons["upgrade"].y + (self.buttons["upgrade"].height - upgrade_surf.get_height()) // 2))
 
         sell_price = self.tower.sell_price()
         sell_text = f"Sell ({sell_price})"
@@ -733,15 +676,8 @@ class TowerMenu:
             warning_surf = None
 
         pygame.draw.rect(screen, sell_color, self.buttons["sell"], border_radius=3)
-        screen.blit(
-            sell_surf,
-            (
-                self.buttons["sell"].x
-                + (self.buttons["sell"].width - sell_surf.get_width()) // 2,
-                self.buttons["sell"].y
-                + (self.buttons["sell"].height - sell_surf.get_height()) // 2,
-            ),
-        )
+        screen.blit(sell_surf, (self.buttons["sell"].x + (self.buttons["sell"].width - sell_surf.get_width()) // 2,
+                                self.buttons["sell"].y + (self.buttons["sell"].height - sell_surf.get_height()) // 2))
 
         if warning_surf:
             screen.blit(warning_surf, (self.x, self.y + self.height + 2))
@@ -767,7 +703,6 @@ class TowerMenu:
                     return None, money
         return None, money
 
-
 def main():
     running = True
     enemies = []
@@ -779,6 +714,8 @@ def main():
     spawn_interval = 120
     money = START_MONEY
     lives = 10
+    enemies_passed = 0
+    max_enemies_passed = 10
     font = pygame.font.SysFont(None, 24)
     selected_tower_type_name = "Стандартная"
     tower_menu = None
@@ -831,31 +768,19 @@ def main():
                                 tower_menu = None
                         else:
                             mx_, my_ = event.pos
-                            tower_rect = pygame.Rect(
-                                tower_menu.tower.x - tower_menu.tower.radius,
-                                tower_menu.tower.y - tower_menu.tower.radius,
-                                tower_menu.tower.radius * 2,
-                                tower_menu.tower.radius * 2,
-                            )
+                            tower_rect = pygame.Rect(tower_menu.tower.x - tower_menu.tower.radius,
+                                                     tower_menu.tower.y - tower_menu.tower.radius,
+                                                     tower_menu.tower.radius * 2,
+                                                     tower_menu.tower.radius * 2)
                             if not tower_rect.collidepoint(mx_, my_):
-                                if not (
-                                    tower_menu.x
-                                    <= mx_
-                                    <= tower_menu.x + tower_menu.width
-                                    and tower_menu.y
-                                    <= my_
-                                    <= tower_menu.y + tower_menu.height
-                                ):
+                                if not (tower_menu.x <= mx_ <= tower_menu.x + tower_menu.width and
+                                        tower_menu.y <= my_ <= tower_menu.y + tower_menu.height):
                                     tower_menu = None
                     else:
                         clicked_tower = None
                         for tower in towers:
-                            tower_rect = pygame.Rect(
-                                tower.x - tower.radius,
-                                tower.y - tower.radius,
-                                tower.radius * 2,
-                                tower.radius * 2,
-                            )
+                            tower_rect = pygame.Rect(tower.x - tower.radius, tower.y - tower.radius,
+                                                     tower.radius * 2, tower.radius * 2)
                             if tower.alive and tower_rect.collidepoint(mx, my):
                                 clicked_tower = tower
                                 break
@@ -874,26 +799,15 @@ def main():
                                         if money >= cost:
                                             cx = zone_rect.x + zone_rect.width // 2
                                             cy = zone_rect.y + zone_rect.height // 2
-                                            towers.append(
-                                                Tower(
-                                                    cx,
-                                                    cy,
-                                                    zone_rect,
-                                                    selected_tower_type_name,
-                                                )
-                                            )
+                                            towers.append(Tower(cx, cy, zone_rect, selected_tower_type_name))
                                             money -= cost
                                             tower_menu = None
                                     break
                 elif event.button == 3:
                     clicked_tower = None
                     for tower in towers:
-                        tower_rect = pygame.Rect(
-                            tower.x - tower.radius,
-                            tower.y - tower.radius,
-                            tower.radius * 2,
-                            tower.radius * 2,
-                        )
+                        tower_rect = pygame.Rect(tower.x - tower.radius, tower.y - tower.radius,
+                                                 tower.radius * 2, tower.radius * 2)
                         if tower.alive and tower_rect.collidepoint(mx, my):
                             clicked_tower = tower
                             break
@@ -910,7 +824,7 @@ def main():
         else:
             spawn_timer += 1
 
-            spawn_interval = max(30, 120 - (current_wave - 1) * 10)
+            spawn_interval = max(30, 120 - (current_wave -1) * 10)
             enemy_health = int(ENEMY_BASE_HEALTH * (1 + 0.2 * (current_wave - 1)))
             enemy_speed = ENEMY_BASE_SPEED * (1 + 0.1 * (current_wave - 1))
 
@@ -925,29 +839,23 @@ def main():
                 wave_cooldown_timer = wave_cooldown
 
         for enemy in enemies[:]:
-            alive, reached_finish = enemy.update(towers, enemy_bullets)
-            if enemy.dying:
-                # Обновляем анимацию смерти отдельно
-                enemy.sprite.update()
-                if enemy.death_animation_complete:
+            alive = enemy.update(towers, enemy_bullets)
+            if not alive:
+                if enemy.alive:
+                    lives -= 1
+                    enemies_passed += 1
+                else:
                     corpses.append(Corpse(enemy.x, enemy.y, enemy.radius, RED))
                     money += 50
-                    enemies.remove(enemy)
-                    if tower_menu and tower_menu.tower in [None, enemy]:
-                        tower_menu = None
-            else:
-                if not alive:
-                    if reached_finish:
-                        lives -= 1
-                    enemies.remove(enemy)
-                    if tower_menu and tower_menu.tower in [None, enemy]:
-                        tower_menu = None
-                elif (
-                    not enemy.alive and not enemy.dying
-                ):  # Умер от урона, но еще не начал анимацию
-                    enemy.dying = True
-                    enemy.sprite.change_animation("die")
-                    enemy.sprite.current_frame = 0
+                enemies.remove(enemy)
+                if tower_menu and not tower_menu.tower.alive:
+                    tower_menu = None
+            elif not enemy.alive:
+                corpses.append(Corpse(enemy.x, enemy.y, enemy.radius, RED))
+                money += 50
+                enemies.remove(enemy)
+                if tower_menu and not tower_menu.tower.alive:
+                    tower_menu = None
 
         for corpse in corpses[:]:
             corpse.update()
@@ -989,39 +897,26 @@ def main():
         money_text = font.render(f"Money: {money}", True, BLACK)
         lives_text = font.render(f"Lives: {lives}", True, BLACK)
         wave_text = font.render(f"Wave: {current_wave}", True, BLACK)
+        passed_text = font.render(f"Passed: {enemies_passed}/{max_enemies_passed}", True, BLACK)
         screen.blit(money_text, (10, 10))
         screen.blit(lives_text, (10, 30))
         screen.blit(wave_text, (10, 50))
+        screen.blit(passed_text, (10, 70))
 
         base_cost = TOWER_BASE_COST[selected_tower_type_name]
-        tower_info = font.render(
-            f"Selected Tower: {selected_tower_type_name} (1-3 to change), Cost: {base_cost}",
-            True,
-            BLACK,
-        )
-        screen.blit(tower_info, (10, 70))
-        upgrade_info = font.render(
-            f"RMB or LMB on tower to open menu, ESC to close menu", True, BLACK
-        )
-        screen.blit(upgrade_info, (10, 90))
+        tower_info = font.render(f"Selected Tower: {selected_tower_type_name} (1-3 to change), Cost: {base_cost}", True, BLACK)
+        screen.blit(tower_info, (10, 90))
+        upgrade_info = font.render(f"RMB or LMB on tower to open menu, ESC to close menu", True, BLACK)
+        screen.blit(upgrade_info, (10, 110))
 
         if not wave_in_progress:
             wave_msg_font = pygame.font.SysFont(None, 72)
             wave_msg = wave_msg_font.render(f"Волна {current_wave}", True, RED)
-            screen.blit(
-                wave_msg,
-                (
-                    WIDTH // 2 - wave_msg.get_width() // 2,
-                    HEIGHT // 2 - wave_msg.get_height() // 2,
-                ),
-            )
+            screen.blit(wave_msg, (WIDTH // 2 - wave_msg.get_width() // 2, HEIGHT // 2 - wave_msg.get_height() // 2))
 
-        if lives <= 0:
+        if lives <= 0 or enemies_passed >= max_enemies_passed:
             game_over_text = font.render("Game Over! Press ESC to quit.", True, RED)
-            screen.blit(
-                game_over_text,
-                (WIDTH // 2 - game_over_text.get_width() // 2, HEIGHT // 2),
-            )
+            screen.blit(game_over_text, (WIDTH // 2 - game_over_text.get_width() // 2, HEIGHT // 2))
             pygame.display.flip()
             wait_for_exit()
             running = False
@@ -1030,7 +925,6 @@ def main():
 
     pygame.quit()
     sys.exit()
-
 
 def wait_for_exit():
     waiting = True
@@ -1042,7 +936,6 @@ def wait_for_exit():
                 if event.key == pygame.K_ESCAPE:
                     waiting = False
         pygame.time.wait(100)
-
 
 if __name__ == "__main__":
     main()
