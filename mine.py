@@ -125,40 +125,28 @@ class EnemyAnimation:
         self.current_frame = 0
         self.animation_timer = 0
         self.animation_speed = ANIMATION_SPEED
+        self.flip = False
 
         try:
             self.sprite_sheet = pygame.image.load("terrorist.png").convert_alpha()
         except:
-            # Создаем заглушку, если нет спрайта
             self.sprite_sheet = pygame.Surface((SPRITE_SIZE * 5, SPRITE_SIZE * 2), pygame.SRCALPHA)
             pygame.draw.rect(self.sprite_sheet, RED, (0, 0, SPRITE_SIZE * 5, SPRITE_SIZE * 2), 1)
 
-        # Обновлено: 4 кадра ходьбы (0-3), 5 кадров смерти (4-8)
         self.animations = {
-            "walk": (0, 4),   # start_col = 0, frame_count = 4
-            "death": (4, 5)   # start_col = 4, frame_count = 5
+            "walk": (0, 4, 0, True),   # start_col, frame_count, row, loop
+            "death": (0, 5, 1, False)   # start_col, frame_count, row, loop
         }
         self.frames = {}
         self._load_frames()
 
     def _load_frames(self):
-        for anim_name, (start_col, frame_count) in self.animations.items():
+        for anim_name, (start_col, frame_count, row, _) in self.animations.items():
             frames = []
             for i in range(frame_count):
                 frame = pygame.Surface((SPRITE_SIZE, SPRITE_SIZE), pygame.SRCALPHA)
-                # В sprite_sheet строки - это строки, столбцы - кадры
-                # В твоем коде start_col - это индекс кадра по горизонтали, а не по вертикали
-                # Поэтому исправим: берем кадры по горизонтали, строки - 0 (одна строка)
-                # В оригинале у тебя 2 строки, но в анимациях используется только строка 0
-                # Но в твоем коде start_col используется как вертикальный индекс (столбец в y)
-                # Судя по твоему коду, start_col - это вертикальный индекс (строка)
-                # Но в твоем спрайтшите 2 строки, 5 столбцов
-                # Исправим: кадры идут по горизонтали, строка зависит от анимации
-                # walk - строка 0, death - строка 1
-                # поэтому:
-                row = 0 if anim_name == "walk" else 1
                 frame.blit(self.sprite_sheet, (0, 0),
-                           (i * SPRITE_SIZE, row * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE))
+                          ((start_col + i) * SPRITE_SIZE, row * SPRITE_SIZE, SPRITE_SIZE, SPRITE_SIZE))
                 frames.append(frame)
             self.frames[anim_name] = frames
 
@@ -171,24 +159,26 @@ class EnemyAnimation:
     def update(self):
         self.animation_timer += 1
         if self.animation_timer >= self.animation_speed:
-            if self.current_animation == "death":
-                # При смерти анимация не циклична, останавливаемся на последнем кадре
-                if self.current_frame < len(self.frames[self.current_animation]) - 1:
-                    self.current_frame += 1
-                # Если последний кадр, не переключаем дальше
-            else:
-                self.current_frame = (self.current_frame + 1) % len(self.frames[self.current_animation])
+            anim_data = self.animations[self.current_animation]
+            frame_count = anim_data[1]
+            loop = anim_data[3]
+            
+            if self.current_frame < frame_count - 1:
+                self.current_frame += 1
+            elif loop:
+                self.current_frame = 0
             self.animation_timer = 0
 
-    def draw(self, screen, direction_angle):
-        if self.current_animation not in self.frames or not self.frames[self.current_animation]:
+    def draw(self, screen, angle):
+        if self.current_animation not in self.frames:
             return
 
         frame = self.frames[self.current_animation][self.current_frame]
-        angle = math.degrees(direction_angle)
-        rotated_frame = pygame.transform.rotate(frame, -angle)
-        screen.blit(rotated_frame, (self.x - rotated_frame.get_width() // 2,
-                                   self.y - rotated_frame.get_height() // 2))
+        angle_deg = math.degrees(angle)
+        rotated_frame = pygame.transform.rotate(frame, -angle_deg)
+        screen.blit(rotated_frame, 
+                   (self.x - rotated_frame.get_width() // 2,
+                    self.y - rotated_frame.get_height() // 2))
 
 
 class Enemy:
@@ -202,7 +192,7 @@ class Enemy:
         self.radius = 15
         self.alive = True
         self.dying = False
-        self.death_animation_complete = False
+        self.dead = False
 
         self.attack_cooldown = 90
         self.attack_timer = random.randint(0, self.attack_cooldown)
@@ -223,20 +213,23 @@ class Enemy:
         self.animation.change_animation("walk")
 
     def update(self, towers, enemy_bullets):
-        if self.dying:
-            self.animation.change_animation("death")
-            self.animation.update()
-            # Проверяем, дошла ли анимация смерти до конца
-            if self.animation.current_animation == "death" and \
-                    self.animation.current_frame == len(self.animation.frames["death"]) - 1:
-                self.death_animation_complete = True
-                self.alive = False
+        if self.dead:
             return False, False
+        
+        if self.dying:
+            if self.animation.current_animation != "death":
+                self.animation.change_animation("death")
+            
+            self.animation.update()
+            
+            if (self.animation.current_animation == "death" and 
+                self.animation.current_frame == len(self.animation.frames["death"]) - 1):
+                self.dead = True
+                self.alive = False
+            return True, False
 
         if self.health <= 0 and not self.dying:
             self.dying = True
-            self.animation.change_animation("death")
-            self.animation.current_frame = 0
             return True, False
 
         if self.path_pos + 1 >= len(self.path):
@@ -305,10 +298,15 @@ class Enemy:
                     self.burst_count = 0
                     self.is_attacking = False
 
-        self.animation.update()
+        if not self.dying:
+            self.animation.change_animation("walk")
+            self.animation.update()
         return True, False
 
     def draw(self):
+        if self.dead:
+            return
+            
         if self.is_attacking:
             self.animation.draw(screen, self.shooting_direction)
         else:
@@ -320,14 +318,14 @@ class Enemy:
             pygame.draw.circle(s, (255, 255, 0, alpha), (self.radius * 2, self.radius * 2), self.radius * 2)
             screen.blit(s, (int(self.x - self.radius * 2), int(self.y - self.radius * 2)))
 
-        # Полоска здоровья
-        health_bar_width = 30
-        health_bar_height = 5
-        health_ratio = max(self.health / self.max_health, 0)
-        pygame.draw.rect(screen, RED, (self.x - health_bar_width // 2, self.y - self.radius - 10,
-                                       health_bar_width, health_bar_height))
-        pygame.draw.rect(screen, GREEN, (self.x - health_bar_width // 2, self.y - self.radius - 10,
-                                         int(health_bar_width * health_ratio), health_bar_height))
+        if not self.dying:
+            health_bar_width = 30
+            health_bar_height = 5
+            health_ratio = max(self.health / self.max_health, 0)
+            pygame.draw.rect(screen, RED, (self.x - health_bar_width // 2, self.y - self.radius - 10,
+                                         health_bar_width, health_bar_height))
+            pygame.draw.rect(screen, GREEN, (self.x - health_bar_width // 2, self.y - self.radius - 10,
+                                           int(health_bar_width * health_ratio), health_bar_height))
 
 
 class TowerAnimation:
@@ -437,7 +435,7 @@ class Tower:
         min_dist = float('inf')
         for enemy in enemies:
             dist = math.hypot(enemy.x - self.x, enemy.y - self.y)
-            if dist <= self.range and enemy.alive:
+            if dist <= self.range and enemy.alive and not enemy.dying:
                 if dist < min_dist:
                     min_dist = dist
                     target = enemy
@@ -468,9 +466,9 @@ class Tower:
         health_bar_height = 6
         health_ratio = max(self.health / self.max_health, 0)
         pygame.draw.rect(screen, RED, (self.x - health_bar_width // 2, self.y + SPRITE_SIZE // 2 + 5,
-                                       health_bar_width, health_bar_height))
+                                     health_bar_width, health_bar_height))
         pygame.draw.rect(screen, GREEN, (self.x - health_bar_width // 2, self.y + SPRITE_SIZE // 2 + 5,
-                                         int(health_bar_width * health_ratio), health_bar_height))
+                                       int(health_bar_width * health_ratio), health_bar_height))
 
         font = pygame.font.SysFont(None, 18)
         lvl_text = font.render(f"lv{self.level}", True, BLACK)
@@ -668,7 +666,7 @@ class TowerMenu:
         upgrade_surf = self.font.render(upgrade_text, True, WHITE)
         pygame.draw.rect(screen, upgrade_color, self.buttons["upgrade"], border_radius=3)
         screen.blit(upgrade_surf, (self.buttons["upgrade"].x + (self.buttons["upgrade"].width - upgrade_surf.get_width()) // 2,
-                                   self.buttons["upgrade"].y + (self.buttons["upgrade"].height - upgrade_surf.get_height()) // 2))
+                                 self.buttons["upgrade"].y + (self.buttons["upgrade"].height - upgrade_surf.get_height()) // 2))
 
         sell_price = self.tower.sell_price()
         sell_text = f"Продать ({sell_price})"
@@ -683,7 +681,7 @@ class TowerMenu:
 
         pygame.draw.rect(screen, sell_color, self.buttons["sell"], border_radius=3)
         screen.blit(sell_surf, (self.buttons["sell"].x + (self.buttons["sell"].width - sell_surf.get_width()) // 2,
-                                self.buttons["sell"].y + (self.buttons["sell"].height - sell_surf.get_height()) // 2))
+                              self.buttons["sell"].y + (self.buttons["sell"].height - sell_surf.get_height()) // 2))
 
         if warning_surf:
             screen.blit(warning_surf, (self.x, self.y + self.height + 2))
@@ -716,8 +714,8 @@ class WaveText:
         self.font = pygame.font.SysFont(None, 64, bold=False)
         self.alpha = 0
         self.max_alpha = 255
-        self.fade_in_speed = 3  # скорость появления
-        self.display_time = 120  # количество кадров отображения после появления
+        self.fade_in_speed = 10
+        self.display_time = 60
         self.timer = 0
         self.finished = False
 
@@ -751,7 +749,7 @@ def main():
     spawn_interval = 120
     money = START_MONEY
     lives = 10
-    font = pygame.font.SysFont(None, 20)  # Меньший размер шрифта для HUD
+    font = pygame.font.SysFont(None, 20)
     selected_tower_type_name = "Стандартная"
     tower_menu = None
 
@@ -759,10 +757,10 @@ def main():
     enemies_spawned = 0
     enemies_per_wave = 10
     wave_in_progress = False
-    wave_cooldown = 180
+    wave_cooldown = 60
     wave_cooldown_timer = wave_cooldown
 
-    wave_text = None  # Для отображения текста новой волны
+    wave_text = None
 
     while running:
         clock.tick(FPS)
@@ -872,8 +870,6 @@ def main():
                 enemies_spawned = 0
                 enemies_per_wave = 10 + (current_wave - 1) * 5
                 spawn_timer = spawn_interval
-
-                # Создаем объект для отображения текста волны
                 wave_text = WaveText(current_wave)
         else:
             spawn_timer += 1
@@ -901,30 +897,18 @@ def main():
         # Обновление врагов
         for enemy in enemies[:]:
             alive, reached_finish = enemy.update(towers, enemy_bullets)
-            if enemy.dying:
-                enemy.animation.update()
-                if enemy.death_animation_complete:
-                    corpses.append(Corpse(enemy.x, enemy.y, enemy.radius, RED))
-                    money += 50
-                    enemies.remove(enemy)
-                    if tower_menu and tower_menu.tower in [None, enemy]:
-                        tower_menu = None
-            else:
-                if not alive:
-                    if reached_finish:
-                        lives -= 1
-                    else:
-                        corpses.append(Corpse(enemy.x, enemy.y, enemy.radius, RED))
-                        money += 50
-                    enemies.remove(enemy)
-                    if tower_menu and tower_menu.tower in [None, enemy]:
-                        tower_menu = None
-                elif not enemy.alive:
-                    corpses.append(Corpse(enemy.x, enemy.y, enemy.radius, RED))
-                    money += 50
-                    enemies.remove(enemy)
-                    if tower_menu and tower_menu.tower in [None, enemy]:
-                        tower_menu = None
+            if enemy.dead:
+                corpses.append(Corpse(enemy.x, enemy.y, enemy.radius, RED))
+                money += 50
+                enemies.remove(enemy)
+                if tower_menu and tower_menu.tower in [None, enemy]:
+                    tower_menu = None
+            elif not alive:
+                if reached_finish:
+                    lives -= 1
+                enemies.remove(enemy)
+                if tower_menu and tower_menu.tower in [None, enemy]:
+                    tower_menu = None
 
         # Обновление трупов
         for corpse in corpses[:]:
@@ -971,7 +955,7 @@ def main():
         if tower_menu:
             tower_menu.draw(screen)
 
-        # HUD - рисуем в верхнем правом углу с полупрозрачным фоном
+        # HUD
         hud_padding = 8
         hud_margin = 10
         hud_lines = [
@@ -984,7 +968,6 @@ def main():
             "ESC: закрыть меню/выйти",
         ]
 
-        # Подсчет размеров
         max_width = 0
         line_height = font.get_height()
         for line in hud_lines:
@@ -997,12 +980,10 @@ def main():
         hud_x = WIDTH - hud_width - hud_margin
         hud_y = hud_margin
 
-        # Фон HUD (полупрозрачный)
         hud_surface = pygame.Surface((hud_width, hud_height), pygame.SRCALPHA)
-        hud_surface.fill((30, 30, 30, 180))  # Темный полупрозрачный фон
+        hud_surface.fill((30, 30, 30, 180))
         screen.blit(hud_surface, (hud_x, hud_y))
 
-        # Рисуем строки текста
         for i, line in enumerate(hud_lines):
             text_surf = font.render(line, True, WHITE)
             screen.blit(text_surf, (hud_x + hud_padding, hud_y + hud_padding + i * line_height))
