@@ -9,7 +9,7 @@ pygame.init()
 
 # Константы
 WIDTH, HEIGHT = 640, 640
-FPS = 60
+FPS =400
 
 # Цвета
 WHITE = (255, 255, 255)
@@ -276,6 +276,7 @@ class Enemy:
         self.facing_right = True
 
     def update(self, towers, enemy_bullets):
+        # Если враг умирает, обновляем анимацию смерти
         if self.dying:
             self.sprite.change_animation("die")
             self.sprite.update()
@@ -286,21 +287,23 @@ class Enemy:
             ):
                 self.death_animation_complete = True
                 self.alive = False
-            return False  # Не двигаемся, если умираем
+            return False, False  # неактивен, не достиг финиша
 
+        # Если здоровье <= 0, запускаем анимацию смерти
         if self.health <= 0 and not self.dying:
             self.dying = True
             self.sprite.change_animation("die")
             self.sprite.current_frame = 0
-            return True
+            return True, False  # активен (уже умирает), не достиг финиша
 
+        # Проверяем, достиг ли конец пути
         if self.path_pos + 1 >= len(self.path):
             if finish_zone.collidepoint(self.x, self.y):
                 self.alive = False
-                return False
+                return False, True  # неактивен, достиг финиша
             else:
                 self.alive = False
-                return False
+                return False, False  # неактивен, не достиг финиша
 
         target_x, target_y = self.path[self.path_pos + 1]
         vec_x = target_x - self.x
@@ -370,7 +373,7 @@ class Enemy:
         if self.burst_delay > 0:
             self.burst_delay -= 1
 
-        return True
+        return True, False  # враг жив и не достиг финиша
 
     def draw(self):
         self.sprite.draw(screen)
@@ -922,8 +925,10 @@ def main():
                 wave_cooldown_timer = wave_cooldown
 
         for enemy in enemies[:]:
+            alive, reached_finish = enemy.update(towers, enemy_bullets)
             if enemy.dying:
-                enemy.update(towers, enemy_bullets)  # Обновляем анимацию смерти
+                # Обновляем анимацию смерти отдельно
+                enemy.sprite.update()
                 if enemy.death_animation_complete:
                     corpses.append(Corpse(enemy.x, enemy.y, enemy.radius, RED))
                     money += 50
@@ -931,9 +936,8 @@ def main():
                     if tower_menu and tower_menu.tower in [None, enemy]:
                         tower_menu = None
             else:
-                alive = enemy.update(towers, enemy_bullets)
                 if not alive:
-                    if enemy.alive:  # Достиг конца пути
+                    if reached_finish:
                         lives -= 1
                     enemies.remove(enemy)
                     if tower_menu and tower_menu.tower in [None, enemy]:
